@@ -30,7 +30,7 @@ body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-
 h1{font-size:26px;line-height:1.1;margin:0;letter-spacing:.02em}
 .sub{color:var(--muted);margin:6px 0 14px;font-size:13px;max-width:62ch}
 input,textarea,button{font:inherit;color:inherit}
-input[type=date],input[type=search],textarea{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}
+input[type=date],input[type=search],input[type=text],textarea{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}
 :focus-visible{outline:2px solid var(--int);outline-offset:2px}
 .tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
 .tools label{display:flex;gap:8px;align-items:center;font-weight:500}
@@ -40,9 +40,12 @@ input[type=date],input[type=search],textarea{background:var(--surface);border:1p
 .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 .d-int{background:var(--int)}.d-freq{background:var(--freq)}
 
-#summary{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:14px}
-#summary h2{font-size:14px;margin:0 0 8px}
-#chips{display:flex;flex-wrap:wrap;gap:6px;max-height:7.2rem;overflow-y:auto}
+#summary,#freq{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+#summary h2,#freq h2{font-size:14px;margin:0 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;max-height:7.2rem;overflow-y:auto}
+.cnt{color:var(--muted);font-size:12px}
+.addrow{display:flex;gap:8px;margin:8px 0 12px}
+.addrow input{flex:1;min-width:0}
 .muted{color:var(--muted);font-size:13px}
 .chip{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;gap:6px;align-items:center;padding:4px 9px;border-radius:999px;background:var(--on);border:1px solid var(--line);font-size:13px}
 .chip:focus-visible{outline:2px solid var(--int)}
@@ -114,16 +117,26 @@ textarea{width:100%;min-height:92px;resize:vertical}
     <span>+ poco · ++ medio · +++ molto</span>
   </p>
 
+  <section id="freq" aria-label="Emozioni più frequenti">
+    <h2>Le tue più frequenti</h2>
+    <div class="chips" id="freqChips"></div>
+  </section>
+
   <section id="summary" aria-label="Emozioni selezionate">
     <h2>Selezionate (<span id="sumCount">0</span>)</h2>
-    <div id="chips"></div>
+    <div class="chips" id="chips"></div>
   </section>
 
   <div class="list" id="list"></div>
   <p class="empty" id="none" hidden>Nessuna emozione corrisponde alla ricerca.</p>
 
-  <h2 class="sec">Altre emozioni significative</h2>
-  <textarea id="other" aria-label="Altre emozioni significative" placeholder="Scrivi qui altre emozioni, anche con intensità e frequenza."></textarea>
+  <h2 class="sec">Altre emozioni</h2>
+  <p class="muted">Se un'emozione non è nell'elenco, aggiungila qui e indica intensità e frequenza.</p>
+  <form class="addrow" id="addForm">
+    <input type="text" id="addName" maxlength="40" autocomplete="off" placeholder="Nome dell'emozione" aria-label="Nome dell'emozione da aggiungere">
+    <button class="btn" type="submit">Aggiungi</button>
+  </form>
+  <div class="list" id="customList"></div>
 </div>
 
 <nav id="az" aria-label="Vai alla lettera"></nav>
@@ -237,8 +250,38 @@ function paintRow(name){
   const r=rowMap[name],v=values[name];
   r.classList.toggle("on",!!v);r.querySelector(".tags").innerHTML=tagsHtml(v);
 }
+function addCustomRow(name){
+  const r=document.createElement("button");r.type="button";r.className="row";r.dataset.name=name;r.dataset.custom="1";
+  r.innerHTML='<span class="name"></span><span class="tags"></span>';r.querySelector(".name").textContent=name;
+  r.addEventListener("click",()=>openSheet(name));
+  $("customList").appendChild(r);rowMap[name]=r;
+}
+function openAny(name){if(!rowMap[name])addCustomRow(name);openSheet(name)}
+
+/* storico delle compilazioni salvate (solo nomi, per le più frequenti) */
+const HIST="treq_storico_v1";
+function loadHist(){try{return JSON.parse(localStorage.getItem(HIST))||{}}catch(e){return{}}}
+function recordHistory(){
+  const h=loadHist();h[$("date").value||today()]=Object.keys(values);
+  try{localStorage.setItem(HIST,JSON.stringify(h))}catch(e){}
+  renderFreq();
+}
+function renderFreq(){
+  const c={};
+  Object.values(loadHist()).forEach(a=>{if(Array.isArray(a))a.forEach(n=>{c[n]=(c[n]||0)+1})});
+  const top=Object.entries(c).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"it")).slice(0,8);
+  const box=$("freqChips");box.textContent="";
+  if(!top.length){const s=document.createElement("span");s.className="muted";s.textContent="Qui compariranno le emozioni che scegli più spesso, dopo il primo salvataggio (PDF o TXT).";box.appendChild(s);return}
+  top.forEach(([n,k])=>{
+    const b=document.createElement("button");b.type="button";b.className="chip";
+    const t=document.createElement("span");t.textContent=n;b.appendChild(t);
+    const q=document.createElement("span");q.className="cnt";q.textContent=k+(k===1?" volta":" volte");b.appendChild(q);
+    b.onclick=()=>openAny(n);box.appendChild(b);
+  });
+}
+
 function renderSummary(){
-  const names=EMOZIONI.filter(n=>values[n]);
+  const names=EMOZIONI.filter(n=>values[n]).concat(Object.keys(values).filter(k=>!EMOZIONI.includes(k)));
   $("sumCount").textContent=names.length;
   const box=$("chips");box.textContent="";
   if(!names.length){const s=document.createElement("span");s.className="muted";s.textContent="Tocca un'emozione nell'elenco per segnarla.";box.appendChild(s);return}
@@ -251,7 +294,7 @@ function renderSummary(){
 }
 function refresh(){
   const n=Object.keys(values).length;
-  $("st").textContent=n?n+(n===1?" selezionata":" selezionate"):"Nessuna selezione";
+  $("st").textContent=n?n+(n===1?" selezionata":" selezionate"):"0 selezionate";
   const q=$("q").value.trim().toLowerCase();let shown=0;
   Object.entries(rowMap).forEach(([name,r])=>{const h=!!q&&!name.toLowerCase().includes(q);r.hidden=h;if(!h)shown++});
   $("none").hidden=shown>0;
@@ -284,15 +327,16 @@ function openSheet(name){
 }
 function closeSheet(){
   const n=openName;openName=null;$("sw").hidden=true;
+  if(n&&rowMap[n]&&rowMap[n].dataset.custom&&!values[n]){rowMap[n].remove();delete rowMap[n];refresh();return}
   if(n&&rowMap[n])try{rowMap[n].focus({preventScroll:true})}catch(e){}
 }
 
 /* ---------- bozza nel browser ---------- */
-function saveDraft(){try{localStorage.setItem(DRAFT,JSON.stringify({date:$("date").value,other:$("other").value,values}))}catch(e){}}
+function saveDraft(){try{localStorage.setItem(DRAFT,JSON.stringify({date:$("date").value,values}))}catch(e){}}
 function loadDraft(){
   try{const d=JSON.parse(localStorage.getItem(DRAFT));
-    if(d&&d.values){values=d.values;$("date").value=d.date||today();$("other").value=d.other||"";
-      Object.keys(values).forEach(k=>{if(!rowMap[k])delete values[k]});return}}catch(e){}
+    if(d&&d.values&&typeof d.values==="object"){values=d.values;$("date").value=d.date||today();
+      Object.keys(values).forEach(k=>{if(!rowMap[k])addCustomRow(k)});return}}catch(e){}
   $("date").value=today();
 }
 
@@ -303,7 +347,6 @@ function sortedRows(){
 function textFile(){
   const L=["TREQ - Trantor Emotions Questionnaire","Scheda 1: emozioni, sentimenti e stati d'animo relativi a questo periodo di vita","","Data: "+fmtDate($("date").value||today()),"","Emozione, intensità, frequenza"];
   sortedRows().forEach(r=>L.push(`${r[0]}: intensità ${r[1]||"-"}, frequenza ${r[2]||"-"}`));
-  const o=$("other").value.trim();if(o)L.push("","Altre emozioni significative:",o);
   return L.join("\n")+"\n";
 }
 async function deliver(name,blob){
@@ -316,13 +359,14 @@ async function deliver(name,blob){
   toast("File salvato nei download");
 }
 function ready(){
-  if(!Object.keys(values).length&&!$("other").value.trim()){toast("Seleziona almeno un'emozione");return false}
+  if(!Object.keys(values).length){toast("Seleziona almeno un'emozione");return false}
+  recordHistory();
   return true;
 }
 $("pdf").onclick=()=>{
   if(!ready())return;
   const date=$("date").value||today();
-  const u=buildPdf({title:"TREQ - Trantor Emotions Questionnaire",subtitle:"Scheda 1: emozioni, sentimenti e stati d'animo relativi a questo periodo di vita",date:fmtDate(date),rows:sortedRows(),other:$("other").value.trim()});
+  const u=buildPdf({title:"TREQ - Trantor Emotions Questionnaire",subtitle:"Scheda 1: emozioni, sentimenti e stati d'animo relativi a questo periodo di vita",date:fmtDate(date),rows:sortedRows(),other:""});
   deliver("TREQ-"+date+".pdf",new Blob([u],{type:"application/pdf"}));
 };
 $("txt").onclick=()=>{
@@ -330,16 +374,25 @@ $("txt").onclick=()=>{
   deliver("TREQ-"+($("date").value||today())+".txt",new Blob([textFile()],{type:"text/plain"}));
 };
 function fresh(){
-  const old=Object.keys(values);values={};$("other").value="";$("date").value=today();
-  old.forEach(paintRow);refresh();saveDraft();toast("Nuova scheda");
+  const old=Object.keys(values);values={};$("date").value=today();
+  old.forEach(k=>{const r=rowMap[k];if(!r)return;if(r.dataset.custom){r.remove();delete rowMap[k]}else paintRow(k)});
+  refresh();saveDraft();toast("Nuova scheda");
 }
-$("new").onclick=()=>{(Object.keys(values).length||$("other").value.trim())?armed($("new"),"Scartare?",fresh):fresh()};
+$("addForm").addEventListener("submit",ev=>{
+  ev.preventDefault();
+  let n=$("addName").value.trim().replace(/\s+/g," ");if(!n)return;
+  n=n[0].toUpperCase()+n.slice(1);
+  const ex=Object.keys(rowMap).find(k=>k.toLowerCase()===n.toLowerCase());
+  $("addName").value="";
+  if(ex){openSheet(ex);return}
+  addCustomRow(n);openSheet(n);
+});
+$("new").onclick=()=>{Object.keys(values).length?armed($("new"),"Scartare?",fresh):fresh()};
 $("st").onclick=()=>$("summary").scrollIntoView({behavior:"smooth",block:"start"});
 $("date").addEventListener("change",saveDraft);
-$("other").addEventListener("input",saveDraft);
 $("q").addEventListener("input",refresh);
 
-buildList();buildSheet();loadDraft();Object.keys(values).forEach(paintRow);refresh();
+buildList();buildSheet();loadDraft();Object.keys(values).forEach(paintRow);refresh();renderFreq();
 try{if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{})}catch(e){}
 </script>
 </body>
