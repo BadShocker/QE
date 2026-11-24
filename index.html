@@ -32,17 +32,23 @@ h1{font-size:26px;line-height:1.1;margin:0;letter-spacing:.02em}
 input,textarea,button{font:inherit;color:inherit}
 input[type=date],input[type=search],input[type=text],textarea{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}
 :focus-visible{outline:2px solid var(--int);outline-offset:2px}
-.tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
-.tools label{display:flex;gap:8px;align-items:center;font-weight:500}
-.tools .grow{flex:1 1 170px}.tools .grow input{width:100%}
+.head2{display:flex;gap:8px;margin-bottom:10px}
+.head2 #date{flex:none}.head2 #note{flex:1}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:13px;margin:0 0 12px}
 .legend b{font-weight:700}
 .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 .d-int{background:var(--int)}.d-freq{background:var(--freq)}
 
-#summary,#freq{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px}
-#summary h2,#freq h2{font-size:14px;margin:0 0 8px}
-.chips{display:flex;flex-wrap:wrap;gap:6px;max-height:7.2rem;overflow-y:auto}
+#dock{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;background:var(--bg);padding:8px 0;margin-bottom:6px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:10}
+.tabs{display:flex;gap:8px}
+.tab{all:unset;box-sizing:border-box;flex:1 1 auto;display:flex;gap:7px;align-items:center;justify-content:center;cursor:pointer;padding:9px 8px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-weight:600;font-size:14px;white-space:nowrap}
+.tab[aria-expanded="true"]{background:var(--int-soft);border-color:var(--int);color:var(--int)}
+.tab:focus-visible{outline:2px solid var(--int);outline-offset:2px}
+.badge{display:inline-block;min-width:20px;padding:0 6px;border-radius:999px;background:var(--int);color:var(--surface);font-size:12px;line-height:20px;text-align:center}
+.panel{margin-top:8px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;max-height:38vh;overflow-y:auto}
+.panel input[type=search]{width:100%}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .cnt{color:var(--muted);font-size:12px}
 .linkbtn{all:unset;cursor:pointer;color:var(--int);font-weight:600;font-size:13px;text-decoration:underline;margin-left:4px}
 .linkbtn:focus-visible{outline:2px solid var(--int);outline-offset:2px}
@@ -106,7 +112,16 @@ textarea{width:100%;min-height:92px;resize:vertical}
 .opts button[aria-pressed="true"] small{color:inherit}
 .opts button:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
 .shbar{display:flex;gap:10px;justify-content:flex-end}
-@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+@keyframes up{from{transform:translateY(36px);opacity:0}}
+@keyframes fade{from{opacity:0}}
+@keyframes drop{from{opacity:0;transform:translateY(-6px)}}
+@keyframes pop{40%{transform:scale(1.06)}}
+#sw:not([hidden]){animation:fade .18s ease-out}
+#sw:not([hidden]) .sheet{animation:up .22s cubic-bezier(.2,.8,.2,1)}
+.panel:not([hidden]){animation:drop .16s ease-out}
+.row.pop{animation:pop .42s ease-out}
+.fly{position:fixed;left:0;top:0;z-index:40;pointer-events:none;padding:6px 14px;border-radius:999px;background:var(--int);color:var(--surface);font-weight:600;font-size:14px;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}#sw,#sw .sheet,.panel,.row.pop{animation:none!important}}
 @media (max-width:420px){.bar .btn{padding:10px 11px}.bar{gap:8px}}
 </style>
 </head>
@@ -115,14 +130,9 @@ textarea{width:100%;min-height:92px;resize:vertical}
   <h1>EmotionQuest</h1>
   <p class="sub">Scheda 1: emozioni, sentimenti e stati d'animo relativi a «questo periodo di vita».</p>
 
-  <div class="tools">
-    <label for="date">Data <input type="date" id="date"></label>
-  </div>
-  <div class="tools">
-    <div class="grow"><input type="text" id="note" maxlength="120" autocomplete="off" placeholder="Nota sulla giornata" aria-label="Nota sulla giornata"></div>
-  </div>
-  <div class="tools">
-    <div class="grow"><input type="search" id="q" placeholder="Cerca un'emozione" aria-label="Cerca un'emozione"></div>
+  <div class="head2">
+    <input type="date" id="date" aria-label="Data">
+    <input type="text" id="note" maxlength="120" autocomplete="off" placeholder="Nota sulla giornata" aria-label="Nota sulla giornata">
   </div>
   <p class="legend">
     <span><i class="dot d-int"></i><b>I</b> = Intensità</span>
@@ -130,15 +140,16 @@ textarea{width:100%;min-height:92px;resize:vertical}
     <span>+ poco · ++ medio · +++ molto</span>
   </p>
 
-  <section id="freq" aria-label="Emozioni più frequenti">
-    <h2>Le tue più frequenti</h2>
-    <div class="chips" id="freqChips"></div>
-  </section>
-
-  <section id="summary" aria-label="Emozioni selezionate">
-    <h2>Selezionate (<span id="sumCount">0</span>)</h2>
-    <div class="chips" id="chips"></div>
-  </section>
+  <div id="dock">
+    <div class="tabs" role="group" aria-label="Pannelli">
+      <button type="button" class="tab" data-p="freq" aria-expanded="false" aria-controls="freq">Frequenti</button>
+      <button type="button" class="tab" id="tabSel" data-p="summary" aria-expanded="false" aria-controls="summary">Selezionate <span class="badge" id="sumCount">0</span></button>
+      <button type="button" class="tab" data-p="searchBox" aria-expanded="false" aria-controls="searchBox">Cerca</button>
+    </div>
+    <section id="freq" class="panel" aria-label="Emozioni più frequenti" hidden><div class="chips" id="freqChips"></div></section>
+    <section id="summary" class="panel" aria-label="Emozioni selezionate" hidden><div class="chips" id="chips"></div></section>
+    <div id="searchBox" class="panel" hidden><input type="search" id="q" placeholder="Cerca un'emozione" aria-label="Cerca un'emozione"></div>
+  </div>
 
   <div class="list" id="list"></div>
   <p class="empty" id="none" hidden>Nessuna emozione corrisponde alla ricerca.</p>
@@ -227,7 +238,7 @@ const $=id=>document.getElementById(id);
 const DRAFT="treq_bozza_v1";
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
 const fmtDate=iso=>{try{return new Date(iso+"T12:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}catch(e){return iso}};
-let values={},rowMap={},openName=null;
+let values={},rowMap={},openName=null,openSrc=null;
 const UNDO="treq_annulla_v1";
 let undoSnap=null,undoTimer=null;
 try{undoSnap=JSON.parse(localStorage.getItem(UNDO))}catch(e){}
@@ -257,13 +268,13 @@ function tagsHtml(v){return (v&&v.i?`<span class="t t-i">I${v.i}</span>`:"")+(v&
 function buildList(){
   $("list").innerHTML=EMOZIONI.map(e=>`<button type="button" class="row" data-name="${e}" data-letter="${e[0].toUpperCase()}"><span class="name">${e}</span><span class="tags"></span></button>`).join("");
   document.querySelectorAll("#list .row").forEach(r=>{rowMap[r.dataset.name]=r});
-  $("list").addEventListener("click",ev=>{const r=ev.target.closest(".row");if(r)openSheet(r.dataset.name)});
+  $("list").addEventListener("click",ev=>{const r=ev.target.closest(".row");if(r)openSheet(r.dataset.name,r)});
   const letters=[...new Set(EMOZIONI.map(e=>e[0].toUpperCase()))];
   $("az").innerHTML=letters.map(l=>`<button type="button" data-l="${l}" aria-label="Vai alla lettera ${l}">${l}</button>`).join("");
   $("az").addEventListener("click",ev=>{
     const b=ev.target.closest("button");if(!b)return;
     const r=[...document.querySelectorAll("#list .row")].find(x=>x.dataset.letter===b.dataset.l&&!x.hidden);
-    if(r)r.scrollIntoView({behavior:"smooth",block:"start"});else toast("Nessuna emozione con la "+b.dataset.l+" nei risultati");
+    if(r)window.scrollTo({top:r.getBoundingClientRect().top+scrollY-$("dock").offsetHeight-14,behavior:"smooth"});else toast("Nessuna emozione con la "+b.dataset.l+" nei risultati");
   });
 }
 function paintRow(name){
@@ -289,7 +300,7 @@ function renderFreq(){
     const b=document.createElement("button");b.type="button";b.className="chip";
     const t=document.createElement("span");t.textContent=n;b.appendChild(t);
     const q=document.createElement("span");q.className="cnt";q.textContent=k+(k===1?" volta":" volte");b.appendChild(q);
-    b.onclick=()=>openSheet(n);box.appendChild(b);
+    b.onclick=()=>openSheet(n,b);box.appendChild(b);
   });
 }
 
@@ -304,7 +315,7 @@ function renderSummary(){
     const b=document.createElement("button");b.type="button";b.className="chip";
     const t=document.createElement("span");t.textContent=n;b.appendChild(t);
     const g=document.createElement("span");g.className="tags";g.innerHTML=tagsHtml(values[n]);b.appendChild(g);
-    b.onclick=()=>openSheet(n);box.appendChild(b);
+    b.onclick=()=>openSheet(n,b);box.appendChild(b);
   });
 }
 function refresh(){
@@ -328,7 +339,7 @@ function buildSheet(){
     if(!v.i&&!v.f)delete values[openName];
     clearUndo();paintRow(openName);refresh();syncSheet();saveDraft();
   }));
-  $("shDone").onclick=closeSheet;
+  $("shDone").onclick=()=>closeSheet(true);
   $("shClear").onclick=()=>{if(openName){clearUndo();delete values[openName];paintRow(openName);refresh();syncSheet();saveDraft()}closeSheet()};
   $("sw").addEventListener("click",ev=>{if(ev.target===$("sw"))closeSheet()});
   addEventListener("keydown",ev=>{if(ev.key==="Escape"&&openName)closeSheet()});
@@ -337,12 +348,30 @@ function syncSheet(){
   const v=(openName&&values[openName])||{i:"",f:""};
   ["i","f"].forEach(k=>$(k==="i"?"optI":"optF").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(v[k]===b.dataset.v))));
 }
-function openSheet(name){
-  openName=name;$("shName").textContent=name;syncSheet();$("sw").hidden=false;$("sheet").focus();
+function openSheet(name,src){
+  openName=name;openSrc=src||null;$("shName").textContent=name;syncSheet();$("sw").hidden=false;$("sheet").focus();
 }
-function closeSheet(){
-  const n=openName;openName=null;$("sw").hidden=true;
+function closeSheet(done){
+  const n=openName,src=openSrc;openName=null;openSrc=null;$("sw").hidden=true;
   if(n&&rowMap[n])try{rowMap[n].focus({preventScroll:true})}catch(e){}
+  if(done&&n&&values[n])celebrate(n,src);
+}
+/* animazione al "Fatto": l'emozione vola verso "Selezionate" */
+const reduceMotion=()=>matchMedia("(prefers-reduced-motion: reduce)").matches;
+function celebrate(name,src){
+  if(reduceMotion())return;
+  const r=rowMap[name];
+  if(r){r.classList.remove("pop");void r.offsetWidth;r.classList.add("pop")}
+  const visible=el=>{if(!el||!document.contains(el))return null;const q=el.getBoundingClientRect();return q.width>0&&q.bottom>0&&q.top<innerHeight?q:null};
+  const from=visible(src)||visible(r)||{left:innerWidth/2,top:innerHeight*0.7,width:0,height:0};
+  const to=$("tabSel").getBoundingClientRect();
+  const el=document.createElement("div");el.className="fly";el.textContent=name;document.body.appendChild(el);
+  const w=el.offsetWidth,h=el.offsetHeight;
+  const sx=from.left+from.width/2-w/2,sy=from.top+from.height/2-h/2;
+  const tx=to.left+to.width/2-w/2,ty=to.top+to.height/2-h/2;
+  const a=el.animate([{transform:`translate(${sx}px,${sy}px) scale(1)`,opacity:1},{transform:`translate(${tx}px,${ty}px) scale(.3)`,opacity:.15}],{duration:560,easing:"cubic-bezier(.45,0,.2,1)"});
+  a.onfinish=()=>{el.remove();$("sumCount").animate([{transform:"scale(1)"},{transform:"scale(1.7)"},{transform:"scale(1)"}],{duration:340,easing:"ease-out"})};
+  a.oncancel=()=>el.remove();
 }
 
 /* ---------- bozza nel browser ---------- */
@@ -404,7 +433,7 @@ function fresh(){
   old.forEach(k=>{if(rowMap[k])paintRow(k)});
   refresh();saveDraft();
 }
-$("st").onclick=()=>$("summary").scrollIntoView({behavior:"smooth",block:"start"});
+$("st").onclick=()=>openPanel("summary");
 let prevDate="";
 $("date").addEventListener("change",()=>{
   const nd=$("date").value;
@@ -416,11 +445,22 @@ $("date").addEventListener("change",()=>{
   }
   prevDate=nd;saveDraft();
 });
+const PANELS=["freq","summary","searchBox"];
+function openPanel(id){
+  PANELS.forEach(p=>{$(p).hidden=p!==id;document.querySelector('.tab[data-p="'+p+'"]').setAttribute("aria-expanded",String(p===id))});
+  if(id!=="searchBox"&&$("q").value){$("q").value="";refresh()}
+  if(id==="searchBox")$("q").focus();
+}
+document.querySelector(".tabs").addEventListener("click",ev=>{
+  const b=ev.target.closest(".tab");if(!b)return;
+  openPanel(b.getAttribute("aria-expanded")==="true"?null:b.dataset.p);
+});
+$("q").addEventListener("keydown",ev=>{if(ev.key==="Escape")openPanel(null)});
 $("q").addEventListener("input",refresh);
 $("note").addEventListener("input",()=>{clearUndo();saveDraft()});
 $("undoBtn").onclick=doUndo;
 
-buildList();buildSheet();loadDraft();prevDate=$("date").value;if(Object.keys(values).length||$("note").value.trim())setUndo(null);Object.keys(values).forEach(paintRow);refresh();renderFreq();paintFmt();
+buildList();buildSheet();loadDraft();prevDate=$("date").value;if(Object.keys(values).length||$("note").value.trim())setUndo(null);else if(undoSnap&&(Object.keys(undoSnap.values||{}).length||(undoSnap.note||"").trim()))showUndoBar();Object.keys(values).forEach(paintRow);refresh();renderFreq();paintFmt();
 try{if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{})}catch(e){}
 </script>
 </body>
