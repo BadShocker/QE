@@ -6,12 +6,12 @@
 <meta name="theme-color" content="#25688f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="TREQ">
+<meta name="apple-mobile-web-app-title" content="EmotionQuest">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="icon" href="icon.png" type="image/png">
-<title>TREQ</title>
+<title>EmotionQuest</title>
 <style>
 :root{
   --bg:#f2f5f7; --surface:#ffffff; --fg:#16212a; --muted:#5b6a77; --line:#d9e0e6;
@@ -44,8 +44,16 @@ input[type=date],input[type=search],input[type=text],textarea{background:var(--s
 #summary h2,#freq h2{font-size:14px;margin:0 0 8px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;max-height:7.2rem;overflow-y:auto}
 .cnt{color:var(--muted);font-size:12px}
-.addrow{display:flex;gap:8px;margin:8px 0 12px}
-.addrow input{flex:1;min-width:0}
+.linkbtn{all:unset;cursor:pointer;color:var(--int);font-weight:600;font-size:13px;text-decoration:underline;margin-left:4px}
+.linkbtn:focus-visible{outline:2px solid var(--int);outline-offset:2px}
+.fmt{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.fmt button{all:unset;box-sizing:border-box;cursor:pointer;padding:10px 11px;font-weight:600;font-size:13px;color:var(--muted)}
+.fmt button+button{border-left:1px solid var(--line)}
+.fmt button[aria-pressed="true"]{background:var(--int-soft);color:var(--int)}
+.fmt button:focus-visible{outline:2px solid var(--int);outline-offset:-2px}
+.undo{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;gap:14px;align-items:center;background:var(--fg);color:var(--bg);padding:8px 8px 8px 14px;border-radius:10px;z-index:30;max-width:92vw;white-space:nowrap}
+.undo button{all:unset;cursor:pointer;font-weight:700;padding:7px 12px;border-radius:7px;border:1px solid currentColor}
+.undo button:focus-visible{outline:2px solid var(--bg);outline-offset:2px}
 .muted{color:var(--muted);font-size:13px}
 .chip{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;gap:6px;align-items:center;padding:4px 9px;border-radius:999px;background:var(--on);border:1px solid var(--line);font-size:13px}
 .chip:focus-visible{outline:2px solid var(--int)}
@@ -104,8 +112,8 @@ textarea{width:100%;min-height:92px;resize:vertical}
 </head>
 <body>
 <div class="wrap">
-  <h1>TREQ</h1>
-  <p class="sub">Trantor Emotions Questionnaire · Scheda 1: emozioni, sentimenti e stati d'animo relativi a «questo periodo di vita».</p>
+  <h1>EmotionQuest</h1>
+  <p class="sub">Scheda 1: emozioni, sentimenti e stati d'animo relativi a «questo periodo di vita».</p>
 
   <div class="tools">
     <label for="date">Data <input type="date" id="date"></label>
@@ -134,22 +142,17 @@ textarea{width:100%;min-height:92px;resize:vertical}
 
   <div class="list" id="list"></div>
   <p class="empty" id="none" hidden>Nessuna emozione corrisponde alla ricerca.</p>
-
-  <h2 class="sec">Altre emozioni</h2>
-  <p class="muted">Se un'emozione non è nell'elenco, aggiungila qui e indica intensità e frequenza.</p>
-  <form class="addrow" id="addForm">
-    <input type="text" id="addName" maxlength="40" autocomplete="off" placeholder="Nome dell'emozione" aria-label="Nome dell'emozione da aggiungere">
-    <button class="btn" type="submit">Aggiungi</button>
-  </form>
-  <div class="list" id="customList"></div>
 </div>
 
 <nav id="az" aria-label="Vai alla lettera"></nav>
 
 <div class="bar">
   <button class="st" id="st" type="button"></button>
-  <button class="btn sec" id="txt" type="button">TXT</button>
-  <button class="btn" id="pdf" type="button">Salva PDF</button>
+  <div class="fmt" role="group" aria-label="Formato del file">
+    <button type="button" data-f="pdf" aria-pressed="true">PDF</button>
+    <button type="button" data-f="txt" aria-pressed="false">TXT</button>
+  </div>
+  <button class="btn" id="save" type="button">Salva</button>
 </div>
 
 <div id="sw" hidden>
@@ -160,6 +163,7 @@ textarea{width:100%;min-height:92px;resize:vertical}
     <div class="shbar"><button class="btn sec" id="shClear" type="button">Rimuovi</button><button class="btn" id="shDone" type="button">Fatto</button></div>
   </div>
 </div>
+<div class="undo" id="undo" hidden role="status"><span>Questionario azzerato</span><button id="undoBtn" type="button">Annulla</button></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -192,11 +196,6 @@ function buildPdf(d){
   const head=()=>{text(M,"Emozione",10,true);text(330,"Intensità (I)",10,true);text(435,"Frequenza (F)",10,true);y-=6;rule();y-=16};
   head();
   d.rows.forEach(r=>{if(y<M){newPage();head()}text(M,r[0],11,false);text(330,r[1]||"-",11,false);text(435,r[2]||"-",11,false);y-=17});
-  if(d.other){
-    y-=10;if(y<M+40)newPage();
-    text(M,"Altre emozioni significative",11,true);y-=18;
-    wrapText(d.other,85).forEach(l=>{if(y<M)newPage();text(M,l,11,false);y-=15});
-  }
   let out="%PDF-1.4\n";const offs=[];
   const add=(id,body)=>{offs[id]=out.length;out+=`${id} 0 obj\n${body}\nendobj\n`};
   const n=pages.length;
@@ -229,6 +228,22 @@ const DRAFT="treq_bozza_v1";
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
 const fmtDate=iso=>{try{return new Date(iso+"T12:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}catch(e){return iso}};
 let values={},rowMap={},openName=null;
+const UNDO="treq_annulla_v1";
+let undoSnap=null,undoTimer=null;
+try{undoSnap=JSON.parse(localStorage.getItem(UNDO))}catch(e){}
+function setUndo(s){undoSnap=s;try{s?localStorage.setItem(UNDO,JSON.stringify(s)):localStorage.removeItem(UNDO)}catch(e){}}
+function hideUndoBar(){$("undo").hidden=true;clearTimeout(undoTimer)}
+function clearUndo(){if(!undoSnap&&$("undo").hidden)return;setUndo(null);hideUndoBar();renderSummary()}
+function showUndoBar(){$("undo").hidden=false;clearTimeout(undoTimer);undoTimer=setTimeout(hideUndoBar,12000)}
+function doUndo(){
+  if(!undoSnap)return;
+  const s=undoSnap;
+  values=s.values&&typeof s.values==="object"?s.values:{};
+  Object.keys(values).forEach(k=>{if(!rowMap[k])delete values[k]});
+  $("date").value=s.date||today();prevDate=$("date").value;$("note").value=s.note||"";
+  setUndo(null);hideUndoBar();
+  Object.keys(rowMap).forEach(paintRow);refresh();saveDraft();toast("Compilazione ripristinata");
+}
 
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove("show"),2600)}
 function armed(btn,label,fn){
@@ -255,13 +270,6 @@ function paintRow(name){
   const r=rowMap[name],v=values[name];
   r.classList.toggle("on",!!v);r.querySelector(".tags").innerHTML=tagsHtml(v);
 }
-function addCustomRow(name){
-  const r=document.createElement("button");r.type="button";r.className="row";r.dataset.name=name;r.dataset.custom="1";
-  r.innerHTML='<span class="name"></span><span class="tags"></span>';r.querySelector(".name").textContent=name;
-  r.addEventListener("click",()=>openSheet(name));
-  $("customList").appendChild(r);rowMap[name]=r;
-}
-function openAny(name){if(!rowMap[name])addCustomRow(name);openSheet(name)}
 
 /* storico delle compilazioni salvate (solo nomi, per le più frequenti) */
 const HIST="treq_storico_v1";
@@ -273,7 +281,7 @@ function recordHistory(){
 }
 function renderFreq(){
   const c={};
-  Object.values(loadHist()).forEach(a=>{if(Array.isArray(a))a.forEach(n=>{c[n]=(c[n]||0)+1})});
+  Object.values(loadHist()).forEach(a=>{if(Array.isArray(a))a.forEach(n=>{if(EMOZIONI.includes(n))c[n]=(c[n]||0)+1})});
   const top=Object.entries(c).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"it")).slice(0,8);
   const box=$("freqChips");box.textContent="";
   if(!top.length){const s=document.createElement("span");s.className="muted";s.textContent="Qui compariranno le emozioni che scegli più spesso, dopo il primo salvataggio (PDF o TXT).";box.appendChild(s);return}
@@ -281,15 +289,17 @@ function renderFreq(){
     const b=document.createElement("button");b.type="button";b.className="chip";
     const t=document.createElement("span");t.textContent=n;b.appendChild(t);
     const q=document.createElement("span");q.className="cnt";q.textContent=k+(k===1?" volta":" volte");b.appendChild(q);
-    b.onclick=()=>openAny(n);box.appendChild(b);
+    b.onclick=()=>openSheet(n);box.appendChild(b);
   });
 }
 
 function renderSummary(){
-  const names=EMOZIONI.filter(n=>values[n]).concat(Object.keys(values).filter(k=>!EMOZIONI.includes(k)));
+  const names=EMOZIONI.filter(n=>values[n]);
   $("sumCount").textContent=names.length;
   const box=$("chips");box.textContent="";
-  if(!names.length){const s=document.createElement("span");s.className="muted";s.textContent="Tocca un'emozione nell'elenco per segnarla.";box.appendChild(s);return}
+  if(!names.length){const s=document.createElement("span");s.className="muted";s.textContent="Tocca un'emozione nell'elenco per segnarla.";box.appendChild(s);
+    if(undoSnap&&(Object.keys(undoSnap.values||{}).length||(undoSnap.note||"").trim())){const b=document.createElement("button");b.type="button";b.className="linkbtn";b.textContent="Ripristina la compilazione azzerata";b.onclick=doUndo;box.appendChild(b)}
+    return}
   names.forEach(n=>{
     const b=document.createElement("button");b.type="button";b.className="chip";
     const t=document.createElement("span");t.textContent=n;b.appendChild(t);
@@ -316,10 +326,10 @@ function buildSheet(){
     const k=$(id).dataset.k,v=values[openName]||(values[openName]={i:"",f:""});
     v[k]=v[k]===b.dataset.v?"":b.dataset.v;
     if(!v.i&&!v.f)delete values[openName];
-    paintRow(openName);refresh();syncSheet();saveDraft();
+    clearUndo();paintRow(openName);refresh();syncSheet();saveDraft();
   }));
   $("shDone").onclick=closeSheet;
-  $("shClear").onclick=()=>{if(openName){delete values[openName];paintRow(openName);refresh();syncSheet();saveDraft()}closeSheet()};
+  $("shClear").onclick=()=>{if(openName){clearUndo();delete values[openName];paintRow(openName);refresh();syncSheet();saveDraft()}closeSheet()};
   $("sw").addEventListener("click",ev=>{if(ev.target===$("sw"))closeSheet()});
   addEventListener("keydown",ev=>{if(ev.key==="Escape"&&openName)closeSheet()});
 }
@@ -332,7 +342,6 @@ function openSheet(name){
 }
 function closeSheet(){
   const n=openName;openName=null;$("sw").hidden=true;
-  if(n&&rowMap[n]&&rowMap[n].dataset.custom&&!values[n]){rowMap[n].remove();delete rowMap[n];refresh();return}
   if(n&&rowMap[n])try{rowMap[n].focus({preventScroll:true})}catch(e){}
 }
 
@@ -341,7 +350,7 @@ function saveDraft(){try{localStorage.setItem(DRAFT,JSON.stringify({date:$("date
 function loadDraft(){
   try{const d=JSON.parse(localStorage.getItem(DRAFT));
     if(d&&d.values&&typeof d.values==="object"){values=d.values;$("date").value=d.date||today();$("note").value=d.note||"";
-      Object.keys(values).forEach(k=>{if(!rowMap[k])addCustomRow(k)});return}}catch(e){}
+      Object.keys(values).forEach(k=>{if(!rowMap[k])delete values[k]});return}}catch(e){}
   $("date").value=today();
 }
 
@@ -350,7 +359,7 @@ function sortedRows(){
   return Object.entries(values).sort((a,b)=>(W[b[1].i||""]+W[b[1].f||""])-(W[a[1].i||""]+W[a[1].f||""])||a[0].localeCompare(b[0],"it")).map(([k,v])=>[k,v.i,v.f]);
 }
 function textFile(){
-  const L=["TREQ - Trantor Emotions Questionnaire","Scheda 1: emozioni, sentimenti e stati d'animo relativi a questo periodo di vita","","Data: "+fmtDate($("date").value||today()),"","Emozione, intensità, frequenza"];
+  const L=["EmotionQuest","Scheda 1: emozioni, sentimenti e stati d'animo relativi a questo periodo di vita","","Data: "+fmtDate($("date").value||today()),"","Emozione, intensità, frequenza"];
   const nt=$("note").value.trim();if(nt)L.splice(4,0,"Nota: "+nt);
   sortedRows().forEach(r=>L.push(`${r[0]}: intensità ${r[1]||"-"}, frequenza ${r[2]||"-"}`));
   return L.join("\n")+"\n";
@@ -369,30 +378,32 @@ function ready(){
   recordHistory();
   return true;
 }
-$("pdf").onclick=()=>{
+const FMT="treq_formato_v1";
+let fmt="pdf",lastSave=0;
+try{if(localStorage.getItem(FMT)==="txt")fmt="txt"}catch(e){}
+function paintFmt(){document.querySelectorAll(".fmt button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.f===fmt)))}
+document.querySelector(".fmt").addEventListener("click",ev=>{
+  const b=ev.target.closest("button[data-f]");if(!b)return;
+  fmt=b.dataset.f;try{localStorage.setItem(FMT,fmt)}catch(e){}paintFmt();
+});
+const fileDate=iso=>{const p=iso.split("-");return p[2]+"."+p[1]+"."+p[0]};
+$("save").onclick=()=>{
+  if(Date.now()-lastSave<1500)return;
   if(!ready())return;
-  const date=$("date").value||today();
-  const u=buildPdf({title:"TREQ - Trantor Emotions Questionnaire",subtitle:"Scheda 1: emozioni, sentimenti e stati d'animo relativi a questo periodo di vita",date:fmtDate(date),note:$("note").value.trim(),rows:sortedRows(),other:""});
-  deliver("TREQ-"+date+".pdf",new Blob([u],{type:"application/pdf"}));
-};
-$("txt").onclick=()=>{
-  if(!ready())return;
-  deliver("TREQ-"+($("date").value||today())+".txt",new Blob([textFile()],{type:"text/plain"}));
+  lastSave=Date.now();
+  const date=$("date").value||today(),name="EQ_"+fileDate(date)+"."+fmt;
+  if(fmt==="pdf"){
+    const u=buildPdf({title:"EmotionQuest",subtitle:"Scheda 1: emozioni, sentimenti e stati d'animo relativi a questo periodo di vita",date:fmtDate(date),note:$("note").value.trim(),rows:sortedRows()});
+    deliver(name,new Blob([u],{type:"application/pdf"}));
+  }else{
+    deliver(name,new Blob([textFile()],{type:"text/plain"}));
+  }
 };
 function fresh(){
   const old=Object.keys(values);values={};$("note").value="";
-  old.forEach(k=>{const r=rowMap[k];if(!r)return;if(r.dataset.custom){r.remove();delete rowMap[k]}else paintRow(k)});
-  refresh();saveDraft();toast("Questionario azzerato");
+  old.forEach(k=>{if(rowMap[k])paintRow(k)});
+  refresh();saveDraft();
 }
-$("addForm").addEventListener("submit",ev=>{
-  ev.preventDefault();
-  let n=$("addName").value.trim().replace(/\s+/g," ");if(!n)return;
-  n=n[0].toUpperCase()+n.slice(1);
-  const ex=Object.keys(rowMap).find(k=>k.toLowerCase()===n.toLowerCase());
-  $("addName").value="";
-  if(ex){openSheet(ex);return}
-  addCustomRow(n);openSheet(n);
-});
 $("st").onclick=()=>$("summary").scrollIntoView({behavior:"smooth",block:"start"});
 let prevDate="";
 $("date").addEventListener("change",()=>{
@@ -400,14 +411,16 @@ $("date").addEventListener("change",()=>{
   if(!nd){$("date").value=prevDate||today();return}
   if(nd!==prevDate&&(Object.keys(values).length||$("note").value.trim())){
     if(!confirm("Cambiando la data il questionario verrà azzerato: perderai le scelte e la nota di questa compilazione.\n\nSe ti servono, salva prima il PDF.\n\nVuoi continuare?")){$("date").value=prevDate;return}
-    fresh();
+    const snap={date:prevDate,note:$("note").value,values:JSON.parse(JSON.stringify(values))};
+    fresh();setUndo(snap);showUndoBar();renderSummary();
   }
   prevDate=nd;saveDraft();
 });
 $("q").addEventListener("input",refresh);
-$("note").addEventListener("input",saveDraft);
+$("note").addEventListener("input",()=>{clearUndo();saveDraft()});
+$("undoBtn").onclick=doUndo;
 
-buildList();buildSheet();loadDraft();prevDate=$("date").value;Object.keys(values).forEach(paintRow);refresh();renderFreq();
+buildList();buildSheet();loadDraft();prevDate=$("date").value;if(Object.keys(values).length||$("note").value.trim())setUndo(null);Object.keys(values).forEach(paintRow);refresh();renderFreq();paintFmt();
 try{if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{})}catch(e){}
 </script>
 </body>

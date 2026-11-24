@@ -1,6 +1,6 @@
 {
- "name": "TREQ - Trantor Emotions Questionnaire",
- "short_name": "TREQ",
+ "name": "EmotionQuest",
+ "short_name": "EmotionQuest",
  "start_url": "./",
  "scope": "./",
  "display": "standalone",
