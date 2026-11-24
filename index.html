@@ -109,6 +109,11 @@ textarea{width:100%;min-height:92px;resize:vertical}
 
   <div class="tools">
     <label for="date">Data <input type="date" id="date"></label>
+  </div>
+  <div class="tools">
+    <div class="grow"><input type="text" id="note" maxlength="120" autocomplete="off" placeholder="Nota sulla giornata" aria-label="Nota sulla giornata"></div>
+  </div>
+  <div class="tools">
     <div class="grow"><input type="search" id="q" placeholder="Cerca un'emozione" aria-label="Cerca un'emozione"></div>
   </div>
   <p class="legend">
@@ -143,7 +148,6 @@ textarea{width:100%;min-height:92px;resize:vertical}
 
 <div class="bar">
   <button class="st" id="st" type="button"></button>
-  <button class="btn sec" id="new" type="button">Nuova</button>
   <button class="btn sec" id="txt" type="button">TXT</button>
   <button class="btn" id="pdf" type="button">Salva PDF</button>
 </div>
@@ -183,7 +187,8 @@ function buildPdf(d){
   newPage();
   text(M,d.title,16,true);y-=20;
   text(M,d.subtitle,9,false);y-=22;
-  text(M,"Data: "+d.date,12,true);y-=26;
+  text(M,"Data: "+d.date,12,true);y-=(d.note?18:26);
+  if(d.note){wrapText("Nota: "+d.note,85).forEach(l=>{text(M,l,11,false);y-=15});y-=11}
   const head=()=>{text(M,"Emozione",10,true);text(330,"Intensità (I)",10,true);text(435,"Frequenza (F)",10,true);y-=6;rule();y-=16};
   head();
   d.rows.forEach(r=>{if(y<M){newPage();head()}text(M,r[0],11,false);text(330,r[1]||"-",11,false);text(435,r[2]||"-",11,false);y-=17});
@@ -332,10 +337,10 @@ function closeSheet(){
 }
 
 /* ---------- bozza nel browser ---------- */
-function saveDraft(){try{localStorage.setItem(DRAFT,JSON.stringify({date:$("date").value,values}))}catch(e){}}
+function saveDraft(){try{localStorage.setItem(DRAFT,JSON.stringify({date:$("date").value,note:$("note").value,values}))}catch(e){}}
 function loadDraft(){
   try{const d=JSON.parse(localStorage.getItem(DRAFT));
-    if(d&&d.values&&typeof d.values==="object"){values=d.values;$("date").value=d.date||today();
+    if(d&&d.values&&typeof d.values==="object"){values=d.values;$("date").value=d.date||today();$("note").value=d.note||"";
       Object.keys(values).forEach(k=>{if(!rowMap[k])addCustomRow(k)});return}}catch(e){}
   $("date").value=today();
 }
@@ -346,6 +351,7 @@ function sortedRows(){
 }
 function textFile(){
   const L=["TREQ - Trantor Emotions Questionnaire","Scheda 1: emozioni, sentimenti e stati d'animo relativi a questo periodo di vita","","Data: "+fmtDate($("date").value||today()),"","Emozione, intensità, frequenza"];
+  const nt=$("note").value.trim();if(nt)L.splice(4,0,"Nota: "+nt);
   sortedRows().forEach(r=>L.push(`${r[0]}: intensità ${r[1]||"-"}, frequenza ${r[2]||"-"}`));
   return L.join("\n")+"\n";
 }
@@ -366,7 +372,7 @@ function ready(){
 $("pdf").onclick=()=>{
   if(!ready())return;
   const date=$("date").value||today();
-  const u=buildPdf({title:"TREQ - Trantor Emotions Questionnaire",subtitle:"Scheda 1: emozioni, sentimenti e stati d'animo relativi a questo periodo di vita",date:fmtDate(date),rows:sortedRows(),other:""});
+  const u=buildPdf({title:"TREQ - Trantor Emotions Questionnaire",subtitle:"Scheda 1: emozioni, sentimenti e stati d'animo relativi a questo periodo di vita",date:fmtDate(date),note:$("note").value.trim(),rows:sortedRows(),other:""});
   deliver("TREQ-"+date+".pdf",new Blob([u],{type:"application/pdf"}));
 };
 $("txt").onclick=()=>{
@@ -374,9 +380,9 @@ $("txt").onclick=()=>{
   deliver("TREQ-"+($("date").value||today())+".txt",new Blob([textFile()],{type:"text/plain"}));
 };
 function fresh(){
-  const old=Object.keys(values);values={};$("date").value=today();
+  const old=Object.keys(values);values={};$("note").value="";
   old.forEach(k=>{const r=rowMap[k];if(!r)return;if(r.dataset.custom){r.remove();delete rowMap[k]}else paintRow(k)});
-  refresh();saveDraft();toast("Nuova scheda");
+  refresh();saveDraft();toast("Questionario azzerato");
 }
 $("addForm").addEventListener("submit",ev=>{
   ev.preventDefault();
@@ -387,12 +393,21 @@ $("addForm").addEventListener("submit",ev=>{
   if(ex){openSheet(ex);return}
   addCustomRow(n);openSheet(n);
 });
-$("new").onclick=()=>{Object.keys(values).length?armed($("new"),"Scartare?",fresh):fresh()};
 $("st").onclick=()=>$("summary").scrollIntoView({behavior:"smooth",block:"start"});
-$("date").addEventListener("change",saveDraft);
+let prevDate="";
+$("date").addEventListener("change",()=>{
+  const nd=$("date").value;
+  if(!nd){$("date").value=prevDate||today();return}
+  if(nd!==prevDate&&(Object.keys(values).length||$("note").value.trim())){
+    if(!confirm("Cambiando la data il questionario verrà azzerato: perderai le scelte e la nota di questa compilazione.\n\nSe ti servono, salva prima il PDF.\n\nVuoi continuare?")){$("date").value=prevDate;return}
+    fresh();
+  }
+  prevDate=nd;saveDraft();
+});
 $("q").addEventListener("input",refresh);
+$("note").addEventListener("input",saveDraft);
 
-buildList();buildSheet();loadDraft();Object.keys(values).forEach(paintRow);refresh();renderFreq();
+buildList();buildSheet();loadDraft();prevDate=$("date").value;Object.keys(values).forEach(paintRow);refresh();renderFreq();
 try{if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{})}catch(e){}
 </script>
 </body>
