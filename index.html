@@ -425,7 +425,7 @@ function textFile(){
 async function deliver(name,blob){
   const file=new File([blob],name,{type:blob.type});
   try{
-    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:name});return true}
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return true}
   }catch(e){if(e&&e.name==="AbortError")return false}
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
