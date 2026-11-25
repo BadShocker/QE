@@ -121,7 +121,19 @@ textarea{width:100%;min-height:92px;resize:vertical}
 .panel:not([hidden]){animation:drop .16s ease-out}
 .row.pop{animation:pop .42s ease-out}
 .fly{position:fixed;left:0;top:0;z-index:40;pointer-events:none;padding:6px 14px;border-radius:999px;background:var(--int);color:var(--surface);font-weight:600;font-size:14px;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.3)}
-@media (prefers-reduced-motion:reduce){.toast{transition:none}#sw,#sw .sheet,.panel,.row.pop{animation:none!important}}
+.dlgwrap{position:fixed;inset:0;z-index:25;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.5)}
+.dlg{background:var(--surface);width:100%;max-width:520px;max-height:92vh;overflow-y:auto;border-radius:16px 16px 0 0;padding:18px 16px calc(16px + env(safe-area-inset-bottom,0px));outline:none}
+.dlg h3{margin:0 0 6px;font-size:19px}
+.dlg p{margin:0 0 14px;color:var(--muted);font-size:14px}
+.opt{all:unset;box-sizing:border-box;display:block;width:100%;cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:10px;background:var(--bg)}
+.opt b{display:block;font-size:15px}
+.opt small{display:block;margin-top:3px;color:var(--muted);font-size:13px;line-height:1.35}
+.opt.main{background:var(--int-soft);border-color:var(--int)}
+.opt.main b{color:var(--int)}
+.opt:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.dlgwrap:not([hidden]){animation:fade .18s ease-out}
+.dlgwrap:not([hidden]) .dlg{animation:up .22s cubic-bezier(.2,.8,.2,1)}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}#sw,#sw .sheet,.panel,.row.pop,.dlgwrap,.dlg{animation:none!important}}
 @media (max-width:420px){.bar .btn{padding:10px 11px}.bar{gap:8px}}
 </style>
 </head>
@@ -172,6 +184,15 @@ textarea{width:100%;min-height:92px;resize:vertical}
     <div class="grp"><div class="gl"><span class="lab lab-i">I</span> Intensità</div><div class="opts" data-k="i" id="optI"></div></div>
     <div class="grp"><div class="gl"><span class="lab lab-f">F</span> Frequenza</div><div class="opts" data-k="f" id="optF"></div></div>
     <div class="shbar"><button class="btn sec" id="shClear" type="button">Rimuovi</button><button class="btn" id="shDone" type="button">Fatto</button></div>
+  </div>
+</div>
+<div class="dlgwrap" id="dayDlg" hidden>
+  <div class="dlg" id="dayBox" role="alertdialog" aria-modal="true" aria-labelledby="dayT" aria-describedby="dayD" tabindex="-1">
+    <h3 id="dayT">Compilazione non salvata</h3>
+    <p id="dayD"></p>
+    <button class="opt main" id="dSave" type="button"><b>Salva e inizia oggi</b><small>Crea il file con la data della compilazione (PDF o TXT, secondo il formato scelto in basso), poi apre una scheda vuota con la data di oggi.</small></button>
+    <button class="opt" id="dDiscard" type="button"><b>Scarta e inizia oggi</b><small>Cancella la compilazione non salvata e apre una scheda vuota con la data di oggi. Per qualche secondo puoi annullare.</small></button>
+    <button class="opt" id="dKeep" type="button"><b>Tieni</b><small id="dKeepD"></small></button>
   </div>
 </div>
 <div class="undo" id="undo" hidden role="status"><span>Questionario azzerato</span><button id="undoBtn" type="button">Annulla</button></div>
@@ -396,11 +417,12 @@ function textFile(){
 async function deliver(name,blob){
   const file=new File([blob],name,{type:blob.type});
   try{
-    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:name});return}
-  }catch(e){if(e&&e.name==="AbortError")return}
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:name});return true}
+  }catch(e){if(e&&e.name==="AbortError")return false}
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
   toast("File salvato nei download");
+  return true;
 }
 function ready(){
   if(!Object.keys(values).length){toast("Seleziona almeno un'emozione");return false}
@@ -416,17 +438,27 @@ document.querySelector(".fmt").addEventListener("click",ev=>{
   fmt=b.dataset.f;try{localStorage.setItem(FMT,fmt)}catch(e){}paintFmt();
 });
 const fileDate=iso=>{const p=iso.split("-");return p[2]+"."+p[1]+"."+p[0]};
-$("save").onclick=()=>{
-  if(Date.now()-lastSave<1500)return;
-  if(!ready())return;
-  lastSave=Date.now();
+const SAVED="treq_salvato_v1",LASTDAY="treq_ultimo_giorno_v1";
+const sig=()=>JSON.stringify([$("date").value,$("note").value.trim(),Object.keys(values).sort().map(k=>[k,values[k].i,values[k].f])]);
+function markSaved(){try{localStorage.setItem(SAVED,sig())}catch(e){}}
+function isSaved(){try{return localStorage.getItem(SAVED)===sig()}catch(e){return false}}
+async function doSave(){
+  if(!ready())return false;
   const date=$("date").value||today(),name="EQ_"+fileDate(date)+"."+fmt;
+  let ok;
   if(fmt==="pdf"){
     const u=buildPdf({title:"EmotionQuest",subtitle:"Scheda 1: emozioni, sentimenti e stati d'animo relativi a questo periodo di vita",date:fmtDate(date),note:$("note").value.trim(),rows:sortedRows()});
-    deliver(name,new Blob([u],{type:"application/pdf"}));
+    ok=await deliver(name,new Blob([u],{type:"application/pdf"}));
   }else{
-    deliver(name,new Blob([textFile()],{type:"text/plain"}));
+    ok=await deliver(name,new Blob([textFile()],{type:"text/plain"}));
   }
+  if(ok)markSaved();
+  return ok;
+}
+$("save").onclick=()=>{
+  if(Date.now()-lastSave<1500)return;
+  lastSave=Date.now();
+  doSave();
 };
 function fresh(){
   const old=Object.keys(values);values={};$("note").value="";
@@ -445,6 +477,40 @@ $("date").addEventListener("change",()=>{
   }
   prevDate=nd;saveDraft();
 });
+/* ---------- nuovo giorno ---------- */
+function getLastDay(){try{return localStorage.getItem(LASTDAY)}catch(e){return null}}
+function setLastDay(){try{localStorage.setItem(LASTDAY,today())}catch(e){}}
+function startToday(){fresh();$("date").value=today();prevDate=$("date").value;saveDraft()}
+function showDayDialog(){
+  const n=Object.keys(values).length,d=$("date").value;
+  $("dayD").textContent="Hai una compilazione del "+fmtDate(d)+(n?" con "+n+(n===1?" emozione":" emozioni"):"")+" che non è stata salvata. Cosa vuoi fare?";
+  $("dKeepD").textContent="Lascia aperta la compilazione del "+fileDate(d)+", senza salvarla e senza cancellarla: ti serve se vuoi finirla o salvarla più tardi. Mantiene la sua data, quindi la scheda non passa a oggi finché non la salvi o non cambi la data tu. Alla prossima apertura, in un altro giorno, ti riproporrò questa scelta.";
+  $("dayDlg").hidden=false;$("dayBox").focus();
+}
+function checkNewDay(){
+  if(!$("dayDlg").hidden||openName)return;
+  const ld=getLastDay(),td=today();
+  const isNew=ld?ld!==td:$("date").value<td;
+  if(!isNew){if(!ld)setLastDay();return}
+  setUndo(null);hideUndoBar();
+  const has=Object.keys(values).length||$("note").value.trim();
+  if(has&&!isSaved()){showDayDialog();return}
+  if($("date").value<td||has)startToday();
+  setLastDay();
+}
+$("dKeep").onclick=()=>{setLastDay();$("dayDlg").hidden=true;toast("Compilazione del "+fileDate($("date").value)+" tenuta aperta")};
+$("dDiscard").onclick=()=>{
+  const snap={date:$("date").value,note:$("note").value,values:JSON.parse(JSON.stringify(values))};
+  $("dayDlg").hidden=true;startToday();setLastDay();setUndo(snap);showUndoBar();renderSummary();
+};
+$("dSave").onclick=async()=>{
+  const ok=await doSave();
+  if(ok){$("dayDlg").hidden=true;startToday();setLastDay();toast("Salvato. Nuova scheda per oggi")}
+};
+addEventListener("keydown",ev=>{if(ev.key==="Escape"&&!$("dayDlg").hidden)$("dKeep").click()});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)checkNewDay()});
+addEventListener("pageshow",ev=>{if(ev.persisted)checkNewDay()});
+
 const PANELS=["freq","summary","searchBox"];
 function openPanel(id){
   PANELS.forEach(p=>{$(p).hidden=p!==id;document.querySelector('.tab[data-p="'+p+'"]').setAttribute("aria-expanded",String(p===id))});
@@ -460,7 +526,7 @@ $("q").addEventListener("input",refresh);
 $("note").addEventListener("input",()=>{clearUndo();saveDraft()});
 $("undoBtn").onclick=doUndo;
 
-buildList();buildSheet();loadDraft();prevDate=$("date").value;if(Object.keys(values).length||$("note").value.trim())setUndo(null);else if(undoSnap&&(Object.keys(undoSnap.values||{}).length||(undoSnap.note||"").trim()))showUndoBar();Object.keys(values).forEach(paintRow);refresh();renderFreq();paintFmt();
+buildList();buildSheet();loadDraft();prevDate=$("date").value;if(Object.keys(values).length||$("note").value.trim())setUndo(null);else if(undoSnap&&(Object.keys(undoSnap.values||{}).length||(undoSnap.note||"").trim()))showUndoBar();Object.keys(values).forEach(paintRow);refresh();renderFreq();paintFmt();checkNewDay();
 try{if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{})}catch(e){}
 </script>
 </body>
