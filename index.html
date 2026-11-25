@@ -186,6 +186,14 @@ textarea{width:100%;min-height:92px;resize:vertical}
     <div class="shbar"><button class="btn sec" id="shClear" type="button">Rimuovi</button><button class="btn" id="shDone" type="button">Fatto</button></div>
   </div>
 </div>
+<div class="dlgwrap" id="dateDlg" hidden>
+  <div class="dlg" id="dateBox" role="alertdialog" aria-modal="true" aria-labelledby="dateT" aria-describedby="dateD" tabindex="-1">
+    <h3 id="dateT">Cambiare la data?</h3>
+    <p id="dateD"></p>
+    <button class="opt main" id="dateNo" type="button"><b>Annulla</b><small>Mantiene la compilazione e la data com'erano.</small></button>
+    <button class="opt" id="dateOk" type="button"><b>Cambia data e azzera</b><small>Cancella le scelte e la nota attuali. Per qualche secondo puoi annullare.</small></button>
+  </div>
+</div>
 <div class="dlgwrap" id="dayDlg" hidden>
   <div class="dlg" id="dayBox" role="alertdialog" aria-modal="true" aria-labelledby="dayT" aria-describedby="dayD" tabindex="-1">
     <h3 id="dayT">Compilazione non salvata</h3>
@@ -373,7 +381,7 @@ function openSheet(name,src){
   openName=name;openSrc=src||null;$("shName").textContent=name;syncSheet();$("sw").hidden=false;$("sheet").focus();
 }
 function closeSheet(done){
-  const n=openName,src=openSrc;openName=null;openSrc=null;$("sw").hidden=true;
+  const n=openName,src=openSrc;openName=null;openSrc=null;$("sw").hidden=true;syncLock();
   if(n&&rowMap[n])try{rowMap[n].focus({preventScroll:true})}catch(e){}
   if(done&&n&&values[n])celebrate(n,src);
 }
@@ -466,17 +474,47 @@ function fresh(){
   refresh();saveDraft();
 }
 $("st").onclick=()=>openPanel("summary");
-let prevDate="";
+let prevDate="",pendingDate="";
+function applyDateChange(nd){
+  const snap={date:prevDate,note:$("note").value,values:JSON.parse(JSON.stringify(values))};
+  fresh();setUndo(snap);showUndoBar();renderSummary();
+  $("date").value=nd;prevDate=nd;saveDraft();
+}
+function setPending(nd){
+  pendingDate=nd;
+  $("dateD").textContent="Cambiando la data in "+fileDate(nd)+" il questionario verrà azzerato: perderai le scelte e la nota di questa compilazione. Se ti servono, annulla e salva prima il file.";
+  $("date").value=prevDate;
+}
+function showDateDialog(nd){
+  setPending(nd);
+  $("date").disabled=true;
+  $("dateDlg").hidden=false;$("dateBox").focus();
+}
+function closeDateDialog(){$("dateDlg").hidden=true;$("date").disabled=false;pendingDate=""}
 $("date").addEventListener("change",()=>{
   const nd=$("date").value;
+  if(!$("dateDlg").hidden){if(nd&&nd!==prevDate)setPending(nd);else $("date").value=prevDate;return}
   if(!nd){$("date").value=prevDate||today();return}
-  if(nd!==prevDate&&(Object.keys(values).length||$("note").value.trim())){
-    if(!confirm("Cambiando la data il questionario verrà azzerato: perderai le scelte e la nota di questa compilazione.\n\nSe ti servono, salva prima il PDF.\n\nVuoi continuare?")){$("date").value=prevDate;return}
-    const snap={date:prevDate,note:$("note").value,values:JSON.parse(JSON.stringify(values))};
-    fresh();setUndo(snap);showUndoBar();renderSummary();
+  if(nd===prevDate)return;
+  if(Object.keys(values).length||$("note").value.trim()){
+    $("date").blur();
+    setTimeout(()=>showDateDialog(nd),60);
+    return;
   }
   prevDate=nd;saveDraft();
 });
+$("dateOk").onclick=()=>{const nd=pendingDate;closeDateDialog();if(nd&&nd!==prevDate)applyDateChange(nd)};
+$("dateNo").onclick=()=>{closeDateDialog();$("date").value=prevDate};
+
+/* mentre una finestra è aperta, il resto della pagina non risponde */
+const OVERLAYS=["sw","dayDlg","dateDlg"];
+function syncLock(){
+  const any=OVERLAYS.some(id=>!$(id).hidden);
+  document.querySelectorAll(".wrap,.bar,#az").forEach(e=>e.toggleAttribute("inert",any));
+}
+const lockObs=new MutationObserver(syncLock);
+OVERLAYS.forEach(id=>lockObs.observe($(id),{attributes:true,attributeFilter:["hidden"]}));
+
 /* ---------- nuovo giorno ---------- */
 function getLastDay(){try{return localStorage.getItem(LASTDAY)}catch(e){return null}}
 function setLastDay(){try{localStorage.setItem(LASTDAY,today())}catch(e){}}
@@ -488,7 +526,7 @@ function showDayDialog(){
   $("dayDlg").hidden=false;$("dayBox").focus();
 }
 function checkNewDay(){
-  if(!$("dayDlg").hidden||openName)return;
+  if(!$("dayDlg").hidden||!$("dateDlg").hidden||openName)return;
   const ld=getLastDay(),td=today();
   const isNew=ld?ld!==td:$("date").value<td;
   if(!isNew){if(!ld)setLastDay();return}
@@ -507,7 +545,11 @@ $("dSave").onclick=async()=>{
   const ok=await doSave();
   if(ok){$("dayDlg").hidden=true;startToday();setLastDay();toast("Salvato. Nuova scheda per oggi")}
 };
-addEventListener("keydown",ev=>{if(ev.key==="Escape"&&!$("dayDlg").hidden)$("dKeep").click()});
+addEventListener("keydown",ev=>{
+  if(ev.key!=="Escape")return;
+  if(!$("dateDlg").hidden)$("dateNo").click();
+  else if(!$("dayDlg").hidden)$("dKeep").click();
+});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)checkNewDay()});
 addEventListener("pageshow",ev=>{if(ev.persisted)checkNewDay()});
 
